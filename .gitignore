@@ -6,3 +6,4 @@ ipch
 *.suo
 /Contrib/LockedList3/build
 *.aps
+/Contrib/LockedList3/Tester

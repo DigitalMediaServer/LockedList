@@ -2767,9 +2767,9 @@ LRESULT CALLBACK CallbackWindow64WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LP
         lstrcpy(file.ProcessDescription, pfile->ProcessDescription);
         lstrcpy(file.ProcessFullPath, pfile->ProcessFullPath);
 #else
-				WideCharToMultiByte(CP_ACP, WC_COMPOSITECHECK, pfile->FullPath, lstrlenW(pfile->FullPath), file.FullPath, sizeof(file.FullPath), NULL, NULL);
-				WideCharToMultiByte(CP_ACP, WC_COMPOSITECHECK, pfile->ProcessDescription, lstrlenW(pfile->ProcessDescription), file.ProcessDescription, sizeof(file.ProcessDescription), NULL, NULL);
-				WideCharToMultiByte(CP_ACP, WC_COMPOSITECHECK, pfile->ProcessFullPath, lstrlenW(pfile->ProcessFullPath), file.ProcessFullPath, sizeof(file.ProcessFullPath), NULL, NULL);
+        WideCharToMultiByte(CP_ACP, WC_COMPOSITECHECK, pfile->FullPath, -1, file.FullPath, sizeof(file.FullPath), NULL, NULL);
+        WideCharToMultiByte(CP_ACP, WC_COMPOSITECHECK, pfile->ProcessDescription, -1, file.ProcessDescription, sizeof(file.ProcessDescription), NULL, NULL);
+        WideCharToMultiByte(CP_ACP, WC_COMPOSITECHECK, pfile->ProcessFullPath, -1, file.ProcessFullPath, sizeof(file.ProcessFullPath), NULL, NULL);
 #endif
         
         // Can inspect ->Options->Callback here if we want to call another callback function.

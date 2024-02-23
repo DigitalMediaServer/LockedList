@@ -568,6 +568,8 @@ static SYSTEM_HANDLE_INFORMATION* GetSystemHandleInformation()
     return NULL;
   NtQuerySystemInformation(SystemHandleInformation, pSysHandleInformation, sizeof(SYSTEM_HANDLE_INFORMATION), &size);
   GlobalFree(pSysHandleInformation);
+  if (size == 0)
+    size = 4096;
 
   while (size < maxSize)
   {

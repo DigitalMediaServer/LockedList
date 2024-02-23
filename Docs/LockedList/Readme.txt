@@ -392,6 +392,12 @@
  Change log
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+  3.0.0.5 - 26th February 2024
+  * ANSI build did not include null-termination when converting Unicode
+    characters from LockedList64.dll to ANSI.
+  * Fixed endless loop in GetSystemHandleInformation() on some Windows
+    versions.
+
   3.0.0.4 - 19th April 2014
   * ANSI build did not convert Unicode characters from LockedList64.dll
     to ANSI.

@@ -109,6 +109,7 @@ typedef DWORD    (WINAPI* PGetModuleFileNameEx)(HANDLE, HMODULE, LPTSTR, DWORD);
 typedef DWORD    (WINAPI* PGetProcessImageFileName)(HANDLE, LPTSTR, DWORD);
 typedef BOOL     (WINAPI* PQueryFullProcessImageName)(HANDLE, DWORD, LPTSTR, PDWORD);
 typedef BOOL     (WINAPI* PWow64DisableWow64FsRedirection)(PVOID*);
+typedef BOOL     (WINAPI* PWow64RevertWow64FsRedirection)(PVOID);
 typedef BOOL     (WINAPI* PIsWow64Process)(HANDLE, PBOOL);
 static PNtQueryObject                   NtQueryObject;
 static PNtQuerySystemInformation        NtQuerySystemInformation;
@@ -120,6 +121,7 @@ static PGetModuleFileNameEx             GetModuleFileNameEx;
 static PGetProcessImageFileName         GetProcessImageFileName;
 static PQueryFullProcessImageName       QueryFullProcessImageName;
 static PWow64DisableWow64FsRedirection  Wow64DisableWow64FsRedirection;
+static PWow64RevertWow64FsRedirection   Wow64RevertWow64FsRedirection;
 static PIsWow64Process                  IsWow64Process;
 
 enum FILE_INFORMATION_CLASS
@@ -223,6 +225,7 @@ static BOOL SystemFuncInit()
     QueryFullProcessImageName      = (PQueryFullProcessImageName)     GetProcAddress(hDll, "QueryFullProcessImageNameA");
 #endif
     Wow64DisableWow64FsRedirection = (PWow64DisableWow64FsRedirection)GetProcAddress(hDll, "Wow64DisableWow64FsRedirection");
+    Wow64RevertWow64FsRedirection  = (PWow64RevertWow64FsRedirection) GetProcAddress(hDll, "Wow64RevertWow64FsRedirection");
     IsWow64Process                 = (PIsWow64Process)                GetProcAddress(hDll, "IsWow64Process");
 
     hDll = LoadLibrary(TEXT("psapi.dll"));
@@ -428,11 +431,19 @@ static DWORD WINAPI NtQueryObjectThread(PVOID threadParams)
 }
 
 // Disable WOW6432 file system redirection.
-static void DisableFileSystemRedirection()
+static PVOID DisableFileSystemRedirection()
 {
   PVOID pOldValue = NULL;
   if (Wow64DisableWow64FsRedirection)
     Wow64DisableWow64FsRedirection(&pOldValue);
+  return pOldValue;
+}
+
+// Enable WOW6432 file system redirection.
+static void RevertFileSystemRedirection(PVOID pOldValue)
+{
+  if (Wow64RevertWow64FsRedirection)
+    Wow64RevertWow64FsRedirection(pOldValue);
 }
 
 // Gets a full file path from a file handle.
@@ -726,8 +737,9 @@ BOOL WINAPI EnumSystemHandles(ENUM_FILES lpEnumFiles, ENUM_OPTIONS* pOpt)
   if (pSysHandleInformation == NULL)
     return TRUE;
 
-  DisableFileSystemRedirection();
+  PVOID pOldValue = DisableFileSystemRedirection();
 
+  BOOL bAbort = FALSE;
   file.TotalFiles = pSysHandleInformation->Count;
 
   // Iterating through the objects.
@@ -751,21 +763,23 @@ BOOL WINAPI EnumSystemHandles(ENUM_FILES lpEnumFiles, ENUM_OPTIONS* pOpt)
       // Call the callback.
       if (!lpEnumFiles(file, pOpt->lParam))
       {
-        GlobalFree(pSysHandleInformation);
-        return FALSE;
+        bAbort = TRUE;
+        break;
       }
     }
 
     // Exit right now?
     if (WaitForSingleObject(g_hFinishNow, 0) != WAIT_TIMEOUT)
     {
-      GlobalFree(pSysHandleInformation);
-      return FALSE;
+      bAbort = TRUE;
+      break;
     }
   }
 
+  RevertFileSystemRedirection(pOldValue);
+
   GlobalFree(pSysHandleInformation);
-  return TRUE;
+  return bAbort ? FALSE : TRUE;
 }
 
 static DWORD* GetProcessIds(DWORD* pdwSize)
@@ -878,7 +892,7 @@ BOOL WINAPI EnumSystemProcesses(ENUM_FILES lpEnumFiles, ENUM_OPTIONS* pOpt, BOOL
   if (pdwProcessIds == NULL)
     return TRUE;
 
-  DisableFileSystemRedirection();
+  PVOID pOldValue = DisableFileSystemRedirection();
 
   BOOL bAbort = FALSE;
   for (DWORD i = 0; !bAbort && i < size / sizeof(DWORD); i++)
@@ -921,6 +935,8 @@ BOOL WINAPI EnumSystemProcesses(ENUM_FILES lpEnumFiles, ENUM_OPTIONS* pOpt, BOOL
       break;
     }
   }
+
+  RevertFileSystemRedirection(pOldValue);
 
   GlobalFree(pdwProcessIds);
   return bAbort ? FALSE : TRUE;
@@ -1008,14 +1024,18 @@ BOOL WINAPI EnumApplications(ENUM_APPLICATIONS lpEnumApplications, ENUM_OPTIONS*
   if (!SystemFuncInit())
     return TRUE;
 
-  DisableFileSystemRedirection();
+  PVOID pOldValue = DisableFileSystemRedirection();
 
   EnumWindows(EnumApplicationsCountProc, (LPARAM)&params.count);
 
   params.opt = pOpt;
   params.lpEnumApplications = lpEnumApplications;
 
-  return EnumWindows(EnumApplicationsProc, (LPARAM)&params);
+  BOOL fSuccess = EnumWindows(EnumApplicationsProc, (LPARAM)&params);
+
+  RevertFileSystemRedirection(pOldValue);
+
+  return fSuccess;
 }
 
 // Finish the enumeration functions ASAP.

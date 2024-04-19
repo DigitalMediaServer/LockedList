@@ -99,9 +99,9 @@
 #include <tchar.h>
 #include "SystemEnum.h"
 
-typedef NTSTATUS (WINAPI* PNtQueryObject)(HANDLE, DWORD, VOID*, DWORD, VOID*);
-typedef NTSTATUS (WINAPI* PNtQuerySystemInformation)(DWORD, VOID*, DWORD, ULONG*);
-typedef NTSTATUS (WINAPI* PNtQueryInformationFile)(HANDLE, PVOID, PVOID, DWORD, DWORD);
+typedef NTSTATUS (WINAPI* PNtQueryObject)(HANDLE, DWORD, PVOID, ULONG, PULONG);
+typedef NTSTATUS (WINAPI* PNtQuerySystemInformation)(DWORD, PVOID, ULONG, PULONG);
+typedef NTSTATUS (WINAPI* PNtQueryInformationFile)(HANDLE, PVOID, PVOID, ULONG, DWORD);
 typedef BOOL     (WINAPI* PEnumProcesses)(DWORD*, DWORD, DWORD*);
 typedef BOOL     (WINAPI* PEnumProcessModules)(HANDLE, HMODULE*, DWORD, LPDWORD);
 typedef BOOL     (WINAPI* PEnumProcessModulesEx)(HANDLE, HMODULE*, DWORD, LPDWORD, DWORD);
@@ -110,8 +110,8 @@ typedef DWORD    (WINAPI* PGetProcessImageFileName)(HANDLE, LPTSTR, DWORD);
 typedef BOOL     (WINAPI* PQueryFullProcessImageName)(HANDLE, DWORD, LPTSTR, PDWORD);
 typedef BOOL     (WINAPI* PWow64DisableWow64FsRedirection)(PVOID*);
 typedef BOOL     (WINAPI* PIsWow64Process)(HANDLE, PBOOL);
-static PNtQuerySystemInformation        NtQuerySystemInformation;
 static PNtQueryObject                   NtQueryObject;
+static PNtQuerySystemInformation        NtQuerySystemInformation;
 static PNtQueryInformationFile          NtQueryInformationFile;
 static PEnumProcesses                   EnumProcesses;
 static PEnumProcessModules              EnumProcessModules;

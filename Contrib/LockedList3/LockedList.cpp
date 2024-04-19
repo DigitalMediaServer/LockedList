@@ -332,7 +332,7 @@ struct ENUM64_OPTIONS
 #define TEXT_HEADING         TEXT("Please close the following programs before continuing with setup...")
 #define TEXT_NOPROGRAMS      TEXT("No programs that have to be closed are running")
 #define TEXT_SEARCHING       TEXT("Searching, please wait...")
-#define TEXT_SEARCHING_0     TEXT("0% ") ## TEXT_SEARCHING
+#define TEXT_SEARCHING_0     TEXT("0% ") TEXT_SEARCHING
 #define TEXT_ENDSEARCH       TEXT("Cancelling search, please wait...")
 #define TEXT_ENDMONITOR      TEXT("Ending program monitoring, please wait...")
 #define TEXT_MSGBOX_CLOSE    TEXT("To continue with setup, the listed processes must be closed.\r\nWould you like to close them now?")

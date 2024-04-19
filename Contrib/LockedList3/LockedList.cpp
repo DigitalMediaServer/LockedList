@@ -454,7 +454,7 @@ BOOL        g_fUserIcons = FALSE;
 BOOL        g_fAutoNext = FALSE;
 UINT        g_uiRunning = 0;
 
-#define MAX_LIST_COUNT 128
+#define MAX_LIST_COUNT 256
 PTCHAR      g_apszFilesList[MAX_LIST_COUNT];
 PTCHAR      g_apszModulesList[MAX_LIST_COUNT];
 PTCHAR      g_apszClassesList[MAX_LIST_COUNT];

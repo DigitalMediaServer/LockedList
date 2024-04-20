@@ -2358,6 +2358,28 @@ NSISFUNC(SilentWait)
   }
 }
 
+// NSIS Function: Wait for thread to finish.
+NSISFUNC(SilentCancel)
+{
+  EXDLL_INIT();
+
+  if (g_hThreadFiles != NULL)
+  {
+    DWORD dwExitCode = -1;
+
+    FinishEnumeratingNow();
+
+    if (IsAsyncDone(INFINITE, &dwExitCode))
+      pushstring(dwExitCode == -1 ? OUT_ERROR : dwExitCode == FALSE ? OUT_CANCEL : OUT_DONE);
+    else
+      pushstring(OUT_ERROR);
+  }
+  else
+  {
+    pushstring(OUT_ERROR);
+  }
+}
+
 // NSIS Function: What is the % complete?
 NSISFUNC(SilentPercentComplete)
 {

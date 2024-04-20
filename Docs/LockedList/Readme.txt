@@ -6,7 +6,7 @@
    locking a selection of files that have to be uninstalled or
    overwritten.
 
-   Last build: 19th April 2015
+   Last build: 19th April 2024
 
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -323,9 +323,10 @@
   thread has finished, or optionally, return in # milliseconds when
   using /time #.
 
-  $Var will contain either "wait" or "done" depending on whether or not
-  the searching has finished. If the search was cancelled (by pushing
-  "false" in the callback function), $Var will be "cancel".
+  $Var will contain either "wait", "done" or "cancel" depending on whether 
+  or not the searching has finished. If the search was cancelled 
+  (by pushing "false" in the callback function or call LockedList::SilentCancel),
+  $Var will be "cancel".
 
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -334,6 +335,19 @@
 
   $Var will contain the current completion percentage, i.e. 65 for 65%.
   This can be used in a progress message.
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ Cancel asynchronous silent search
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  LockedList::SilentCancel
+   Pop $Var
+
+  Cancel the current asynchronous silent search and waits until it to 
+  finally complete.
+
+  $Var will contain either "wait", "done" or "cancel" depending on whether 
+  or not the searching has finished.
 
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  Other functions

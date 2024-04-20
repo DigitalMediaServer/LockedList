@@ -74,6 +74,7 @@ UINT WINAPI GetApplicationsCount();
 
 BOOL IsSystemProcess(DWORD);
 void GetFileFromPath(const PTCHAR, size_t, PTCHAR, size_t);
+void StartEnumeratingNow();
 void FinishEnumeratingNow();
 BOOL EndsWith(const PTCHAR, const PTCHAR);
 BOOL StartsWith(const PTCHAR, const PTCHAR);

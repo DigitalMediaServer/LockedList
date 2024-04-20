@@ -1347,10 +1347,10 @@ static void ResetState()
   g_hThreadFiles = NULL;
 }
 
-// Execute the system enumerations.
+// Execute the system enumerations - main entry point of any enum.
 static BOOL SystemEnum(OUT_WHERE_INFO outWhereInfo)
 {
-  POINT pt;
+  StartEnumeratingNow();
 
   LIST_INFO files;
   files.outWhereInfo = outWhereInfo;
@@ -1360,6 +1360,7 @@ static BOOL SystemEnum(OUT_WHERE_INFO outWhereInfo)
   opt.GetWindowCaption = outWhereInfo.outWhere != OutCallback;
   opt.lParam = (LPARAM)&files;
 
+  POINT pt;
   if (outWhereInfo.outWhere != OutCallback)
   {
     // Get processing cursor.
@@ -2619,6 +2620,7 @@ extern "C" void __declspec(dllexport) EnumSystemProcesses64W(HWND hwnd, HINSTANC
       BOOL fEnumModules = nCmdLine > 2 && lstrcmpW(ppwszCmdLine[2], L"1") == 0;
       
       ENUM_OPTIONS opt;
+      StartEnumeratingNow();
       opt.GetWindowCaption = fGetWindowCaption;
       opt.lParam = (LPARAM)hCallerWindow;
       EnumSystemProcesses(EnumSystemProcesses64Proc, &opt, fEnumModules);

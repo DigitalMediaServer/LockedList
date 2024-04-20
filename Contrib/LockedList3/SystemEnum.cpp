@@ -197,11 +197,6 @@ BOOL g_fIsWin2000;
 // Get the NtDll and PSAPI function pointers.
 static BOOL SystemFuncInit()
 {
-  if (g_hFinishNow == NULL)
-    g_hFinishNow = CreateEvent(NULL, FALSE, FALSE, NULL);
-  else
-    ResetEvent(g_hFinishNow);
-
   if (
     NtQuerySystemInformation  == NULL ||
     NtQueryObject             == NULL ||
@@ -1043,6 +1038,15 @@ BOOL WINAPI EnumApplications(ENUM_APPLICATIONS lpEnumApplications, ENUM_OPTIONS*
   RevertFileSystemRedirection(pOldValue);
 
   return fSuccess;
+}
+
+// Start the enumeration.
+void StartEnumeratingNow()
+{
+  if (g_hFinishNow == NULL)
+    g_hFinishNow = CreateEvent(NULL, TRUE, FALSE, NULL);
+  else
+    ResetEvent(g_hFinishNow);
 }
 
 // Finish the enumeration functions ASAP.

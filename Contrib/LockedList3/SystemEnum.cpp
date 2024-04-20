@@ -191,6 +191,11 @@ struct ENUM_APPLICATIONS_PARAMS
   ENUM_APPLICATIONS lpEnumApplications;
 };
 
+//handle types cache
+#define MAX_OBJECT_TYPE_NAME_SIZE 1024
+#define MAX_CACHED_OBJECT_TYPE_NUMBER 257
+static TCHAR g_ObjectTypeNames[MAX_CACHED_OBJECT_TYPE_NUMBER][MAX_OBJECT_TYPE_NAME_SIZE] = {0};
+
 HANDLE g_hFinishNow;
 BOOL g_fIsWin2000;
 
@@ -441,8 +446,24 @@ static void RevertFileSystemRedirection(PVOID pOldValue)
     Wow64RevertWow64FsRedirection(pOldValue);
 }
 
+static BOOL QueryHandleInfo(LPTHREAD_START_ROUTINE lpProc, NTFUNC_THREAD_PARAMS* pParams)
+{
+  HANDLE hThread = CreateThread(NULL, 0, lpProc, pParams, 0, NULL);
+
+  if (hThread != NULL)
+  {
+    // Terminate threads that are frozen.
+    if (WaitForSingleObject(hThread, 300) == WAIT_TIMEOUT)
+      TerminateThread(hThread, 0);
+    CloseHandle(hThread);
+    return TRUE;
+  }
+  else
+    return FALSE;
+}
+
 // Gets a full file path from a file handle.
-static BOOL GetHandleFilePath(HANDLE h, FILE_INFORMATION* file)
+static BOOL GetHandleFilePath(HANDLE h, USHORT typeIndex, FILE_INFORMATION* file)
 {
   BOOL fSuccess = FALSE;
 
@@ -453,66 +474,69 @@ static BOOL GetHandleFilePath(HANDLE h, FILE_INFORMATION* file)
   {
     BOOL fRemote = file->ProcessId != GetCurrentProcessId();
     HANDLE hRemoteProcess = NULL;
-    HANDLE hProcess = NULL;
+    HANDLE hHandle = NULL;
     if (fRemote)
     {
       hRemoteProcess = OpenProcess(file->ProcessId);
       if (hRemoteProcess != NULL)
-        hProcess = DuplicateHandle(hRemoteProcess, h);
+        hHandle = DuplicateHandle(hRemoteProcess, h);
     }
     else
-      hProcess = h;
+      hHandle = h;
 
-    if (hProcess != NULL)
+    if (hHandle != NULL)
     {
       NTFUNC_THREAD_PARAMS threadParams;
-      threadParams.Handle = hProcess;
+      threadParams.Handle = hHandle;
       threadParams.BufferLength = sizeof(TCHAR)*1024;
       threadParams.Buffer = (PTCHAR)GlobalAlloc(GPTR, threadParams.BufferLength);
       threadParams.OutBufferLength = sizeof(TCHAR)*1024;
       threadParams.OutBuffer = (PTCHAR)GlobalAlloc(GPTR, threadParams.OutBufferLength);
 
       // What type is it the handle?
-      threadParams.ObjectInformationClass = ObjectTypeInformation;
-      ZeroMemory(threadParams.Buffer, threadParams.BufferLength);
-      ZeroMemory(threadParams.OutBuffer, threadParams.OutBufferLength);
-      HANDLE hThread = CreateThread(NULL, 0, NtQueryObjectThread, (void*)&threadParams, 0, NULL);
+      PTCHAR pszTypeName = NULL;
 
-      // Terminate threads that are frozen.
-      if (WaitForSingleObject(hThread, 200) == WAIT_TIMEOUT)
-        TerminateThread(hThread, 0);
-      CloseHandle(hThread);
+      if (typeIndex != ULONG_MAX && typeIndex < MAX_CACHED_OBJECT_TYPE_NUMBER)
+        pszTypeName = g_ObjectTypeNames[typeIndex];
+
+      if (pszTypeName == NULL || lstrlen(pszTypeName) == 0)
+      {
+        threadParams.ObjectInformationClass = ObjectTypeInformation;
+        ZeroMemory(threadParams.Buffer, threadParams.BufferLength);
+        ZeroMemory(threadParams.OutBuffer, threadParams.OutBufferLength);
+
+        //don't try get file type in the current thread:
+        //  NtQueryObject, NtQueryVolumeInformationFile and GetFileType - all freezes on some magic handle type
+        //  clearly reproduced on Windows XP, but others OS are not excluded
+        if (QueryHandleInfo(NtQueryObjectThread, &threadParams)
+          && *threadParams.OutBuffer) // The buffer is not empty
+        {
+          pszTypeName = threadParams.OutBuffer;
+
+          if (typeIndex != ULONG_MAX && typeIndex < MAX_CACHED_OBJECT_TYPE_NUMBER)
+            lstrcpy(g_ObjectTypeNames[typeIndex], pszTypeName);
+        }
+      }
 
       // Only want files and directories!
-      if (lstrcmpi(threadParams.OutBuffer, TEXT("File")) == 0 || lstrcmpi(threadParams.OutBuffer, TEXT("Directory")) == 0)
+      if (pszTypeName != NULL
+        && (lstrcmpi(pszTypeName, TEXT("File")) == 0 || lstrcmpi(pszTypeName, TEXT("Directory")) == 0))
       {
         // First try using NtQueryInformationFile which does not freeze when it doesn't get access
         // but instead returns an empty string as the file name.
         ZeroMemory(threadParams.Buffer, threadParams.BufferLength);
         ZeroMemory(threadParams.OutBuffer, threadParams.OutBufferLength);
-        hThread = CreateThread(NULL, 0, NtQueryInformationFileThread, (void*)&threadParams, 0, NULL);
 
-        // Terminate threads that are frozen.
-        if (WaitForSingleObject(hThread, 200) == WAIT_TIMEOUT)
-          TerminateThread(hThread, 0);
-        CloseHandle(hThread);
-
-        // The buffer is empty, do not continue.
-        if (*threadParams.OutBuffer)
+        if (QueryHandleInfo(NtQueryInformationFileThread, &threadParams)
+          && *threadParams.OutBuffer) // The buffer is not empty
         {
           // Get the full device path for the file now that we know we have access.
           threadParams.ObjectInformationClass = ObjectNameInformation;
           ZeroMemory(threadParams.Buffer, threadParams.BufferLength);
           ZeroMemory(threadParams.OutBuffer, threadParams.OutBufferLength);
-          hThread = CreateThread(NULL, 0, NtQueryObjectThread, (void*)&threadParams, 0, NULL);
 
-          // Terminate threads that are frozen.
-          if (WaitForSingleObject(hThread, 200) == WAIT_TIMEOUT)
-            TerminateThread(hThread, 0);
-          CloseHandle(hThread);
-
-          // Success?
-          if (*threadParams.OutBuffer)
+          if (QueryHandleInfo(NtQueryObjectThread, &threadParams)
+            && *threadParams.OutBuffer) // The buffer is not empty
           {
             ZeroMemory(file->FullPath, sizeof(file->FullPath));
             if (GetFsFilePath(threadParams.OutBuffer, file->FullPath))
@@ -520,14 +544,14 @@ static BOOL GetHandleFilePath(HANDLE h, FILE_INFORMATION* file)
           }
         }
       }
-      
-      // Close the duplicated remote handle.
-      if (fRemote && hProcess != NULL)
-        CloseHandle(hProcess);
 
       GlobalFree(threadParams.Buffer);
       GlobalFree(threadParams.OutBuffer);
     }
+
+    // Close the duplicated remote handle.
+    if (fRemote && hHandle != NULL)
+      CloseHandle(hHandle);
 
     // Close the remote process handle.
     if (fRemote && hRemoteProcess != NULL)
@@ -758,7 +782,9 @@ BOOL WINAPI EnumSystemHandles(ENUM_FILES lpEnumFiles, ENUM_OPTIONS* pOpt)
     }
 
     // Get the file path of the handle.
-    if (bOpenProcessSuccessLast && GetHandleFilePath((HANDLE)pSysHandleInformation->Handles[i].HandleValue, &file))
+    if (bOpenProcessSuccessLast 
+      && GetHandleFilePath((HANDLE)pSysHandleInformation->Handles[i].HandleValue, 
+        (USHORT)pSysHandleInformation->Handles[i].ObjectTypeIndex, &file))
     {
       GetProcessDescription(&file, pOpt->GetWindowCaption);
 

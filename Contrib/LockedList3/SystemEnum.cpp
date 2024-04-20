@@ -607,8 +607,9 @@ static SYSTEM_HANDLE_INFORMATION* GetSystemHandleInformation()
 }
 
 // Get the process image file name.
-static void GetProcessFileName(FILE_INFORMATION* pFile)
+static BOOL GetProcessFileName(FILE_INFORMATION* pFile)
 {
+  BOOL bSuccess = FALSE;
   ZeroMemory(pFile->ProcessFullPath, sizeof(pFile->ProcessFullPath));
 
   if (QueryFullProcessImageName != NULL)
@@ -619,6 +620,7 @@ static void GetProcessFileName(FILE_INFORMATION* pFile)
       DWORD dwSize = MAX_PATH;
       QueryFullProcessImageName(hProcess, 0, pFile->ProcessFullPath, &dwSize);
       CloseHandle(hProcess);
+      bSuccess = TRUE;
     }
   }
   else if (GetProcessImageFileName != NULL)
@@ -629,6 +631,7 @@ static void GetProcessFileName(FILE_INFORMATION* pFile)
       if (GetProcessImageFileName(hProcess, pFile->ProcessFullPath, MAX_PATH))
         GetFsFilePath(pFile->ProcessFullPath, pFile->ProcessFullPath);
       CloseHandle(hProcess);
+      bSuccess = TRUE;
     }
   }
   else
@@ -638,8 +641,11 @@ static void GetProcessFileName(FILE_INFORMATION* pFile)
     {
       GetModuleFileNameEx(hProcess, NULL, pFile->ProcessFullPath, MAX_PATH);
       CloseHandle(hProcess);
+      bSuccess = TRUE;
     }
   }
+
+  return bSuccess;
 }
 
 // Reads a files' file description.
@@ -732,6 +738,7 @@ BOOL WINAPI EnumSystemHandles(ENUM_FILES lpEnumFiles, ENUM_OPTIONS* pOpt)
 {
   FILE_INFORMATION file;
   DWORD dwProcessIdLast = -1;
+  BOOL bOpenProcessSuccessLast = FALSE;
 
   SYSTEM_HANDLE_INFORMATION* pSysHandleInformation = GetSystemHandleInformation();
   if (pSysHandleInformation == NULL)
@@ -751,12 +758,12 @@ BOOL WINAPI EnumSystemHandles(ENUM_FILES lpEnumFiles, ENUM_OPTIONS* pOpt)
     // New process Id to get the image file name of.
     if (file.ProcessId != dwProcessIdLast)
     {
-      GetProcessFileName(&file);
+      bOpenProcessSuccessLast = GetProcessFileName(&file);
       dwProcessIdLast = file.ProcessId;
     }
 
     // Get the file path of the handle.
-    if (GetHandleFilePath((HANDLE)pSysHandleInformation->Handles[i].HandleValue, &file))
+    if (bOpenProcessSuccessLast && GetHandleFilePath((HANDLE)pSysHandleInformation->Handles[i].HandleValue, &file))
     {
       GetProcessDescription(&file, pOpt->GetWindowCaption);
 

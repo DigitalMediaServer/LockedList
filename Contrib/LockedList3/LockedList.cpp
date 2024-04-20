@@ -493,6 +493,9 @@ HANDLE      g_hThreadAutoClose = NULL;
 #define MAX_PARAMS 13
 PTCHAR  g_apszParams[MAX_PARAMS];
 
+static BOOL IsAsyncDone(DWORD TimeOut, LPDWORD ExitCode);
+static VOID CleanupAsyncThread();
+
 // Ilya Kotelnikov> few forward declarations
 static BOOL CallLockedList64(PTCHAR pszFunction, PTCHAR pszArguments);
 static BOOL EnumSystemProcesses64(EnumCallback, ENUM_OPTIONS*, BOOL);
@@ -1344,7 +1347,10 @@ static void ResetState()
   g_hDialog = NULL;
   g_fDone = g_fAutoClose = g_fUserIcons = g_fShowRunningApplications = g_fAutoNext = g_fAutoClosing = g_fCancelClicked = g_fBackClicked = g_fIgnoreClicked = FALSE;
   g_uiIgnoreBtn = g_uiRunning = 0;
-  g_hThreadFiles = NULL;
+
+  //don't do this - keep handle after search completed (cleanup on starting a new search only)
+  //leave a chance to get info about thread termination and its result
+  //g_hThreadFiles = NULL;
 }
 
 // Execute the system enumerations - main entry point of any enum.
@@ -1982,6 +1988,7 @@ static void ShowDialog()
 
   g_fDone = g_fMonitoringDone = FALSE;
 
+  CleanupAsyncThread();
   // Begin the thread of doom.
   g_hThreadFiles = CreateThread(NULL, 0, FilesThread, NULL, 0, NULL);
 
@@ -1998,8 +2005,7 @@ static void ShowDialog()
     }
   }
 
-  CloseHandle(g_hThreadFiles);
-  g_hThreadFiles = NULL;
+  CleanupAsyncThread();
 
   // Free list view item params.
   lvi.iItem = ListView_GetItemCount(g_hList);
@@ -2260,7 +2266,7 @@ NSISFUNC(SilentSearch)
 {
   DLL_INIT();
 
-  if (!EnableDebugPriv() || g_hThreadFiles != NULL)
+  if (!EnableDebugPriv() || !IsAsyncDone(0, NULL))
   {
     pushstring(OUT_ERROR);
     return;
@@ -2287,11 +2293,12 @@ NSISFUNC(SilentSearch)
     if (iFunctionAddress > 0)
     {
       g_pExtraParameters = extra;
+      CleanupAsyncThread();
 
       if (fAsync)
       {
         g_hThreadFiles = CreateThread(NULL, 0, FilesThreadSilent, (LPVOID)iFunctionAddress, 0, NULL);
-        pushstring(OUT_OK);
+        pushstring(g_hThreadFiles != NULL ? OUT_OK : OUT_ERROR);
       }
       else
       {
@@ -2316,9 +2323,10 @@ NSISFUNC(SilentWait)
 {
   EXDLL_INIT();
 
-  if (g_hThreadFiles)
+  if (g_hThreadFiles != NULL)
   {
-    BOOL fWait = TRUE;
+    int iTimeOut = INFINITE;
+    DWORD dwExitCode = -1;
     PTCHAR pszParam = (PTCHAR)GlobalAlloc(GPTR, sizeof(TCHAR)*string_size);
 
     if (popstring(pszParam) == 0)
@@ -2326,22 +2334,10 @@ NSISFUNC(SilentWait)
       // Wait for so many milliseconds.
       if (lstrcmpi(pszParam, TEXT("/time")) == 0)
       {
-        fWait = FALSE;
-        popstring(pszParam);
-
-        if (g_hThreadFiles != NULL)
-        {
-          if (WaitForSingleObject(g_hThreadFiles, myatoi(pszParam)) == WAIT_TIMEOUT)
-          {
-            pushstring(OUT_WAIT);
-          }
-          else
-          {
-            DWORD dwExitCode = -1;
-            GetExitCodeThread(g_hThreadFiles, &dwExitCode);
-            pushstring(dwExitCode == -1 ? OUT_ERROR : dwExitCode == FALSE ? OUT_CANCEL : OUT_DONE);
-          }
-        }
+        if (popstring(pszParam) == 0)
+          iTimeOut = myatoi(pszParam);
+        else
+          iTimeOut = 0;
       }
       else
       {
@@ -2349,15 +2345,12 @@ NSISFUNC(SilentWait)
       }
     }
 
-    GlobalFree(pszParam);
+    if (IsAsyncDone(iTimeOut, &dwExitCode))
+      pushstring(dwExitCode == -1 ? OUT_ERROR : dwExitCode == FALSE ? OUT_CANCEL : OUT_DONE);
+    else
+      pushstring(OUT_WAIT);
 
-    // Wait until the thread has finished.
-    if (fWait)
-    {
-      WaitForSingleObject(g_hThreadFiles, INFINITE);
-      CloseHandle(g_hThreadFiles);
-      g_hThreadFiles = NULL;
-    }
+    GlobalFree(pszParam);
   }
   else
   {
@@ -2370,7 +2363,7 @@ NSISFUNC(SilentPercentComplete)
 {
   EXDLL_INIT();
 
-  if (g_hThreadFiles)
+  if (g_hThreadFiles != NULL)
   {
     TCHAR szPercentComplete[4];
     wsprintf(szPercentComplete, TEXT("%u"), g_uiPercentComplete);
@@ -2678,6 +2671,34 @@ static UINT GetSystemModulesCount64()
   g_uGetSystemModulesCount64 = 0;
   CallLockedList64(TEXT("GetSystemModulesCount64"), TEXT(""));
   return g_uGetSystemModulesCount64;
+}
+
+//search is still going on
+static BOOL IsAsyncDone(DWORD TimeOut, LPDWORD ExitCode)
+{
+  if (g_hThreadFiles == NULL)
+    return TRUE;
+  else if (WaitForSingleObject(g_hThreadFiles, TimeOut) == WAIT_TIMEOUT)
+    return FALSE;
+  else
+  {
+    if (ExitCode != NULL)
+    {
+      *ExitCode = -1;
+      GetExitCodeThread(g_hThreadFiles, ExitCode);
+    }
+    return TRUE;
+  } 
+}
+
+//cleanup search thread before starting a new search
+static VOID CleanupAsyncThread()
+{
+  if (g_hThreadFiles != NULL)
+  {
+    CloseHandle(g_hThreadFiles);
+    g_hThreadFiles = NULL;
+  }
 }
 
 static BOOL CallLockedList64(PTCHAR pszFunction, PTCHAR pszArguments)

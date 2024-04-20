@@ -131,7 +131,8 @@ enum FILE_INFORMATION_CLASS
 
 enum SYSTEM_INFO_CLASS
 {
-  SystemHandleInformation = 16
+  SystemHandleInformation = 16,
+  SystemExtendedHandleInformation = 64
 };
 
 enum OBJECT_INFORMATION_CLASS
@@ -156,21 +157,23 @@ struct FILE_NAME_INFORMATION
   WCHAR FileName[1];
 };
 
-struct SYSTEM_HANDLE
+struct SYSTEM_HANDLE_TABLE_ENTRY_INFO_EX
 {
-  USHORT ProcessId;
-  USHORT CreatorBackTraceIndex;
-  UCHAR  ObjectTypeIndex;
-  UCHAR  HandleAttributes;
-  USHORT HandleValue;
   PVOID  Object;
+  HANDLE UniqueProcessId;
+  HANDLE HandleValue;
   ULONG  GrantedAccess;
+  USHORT CreatorBackTraceIndex;
+  USHORT ObjectTypeIndex;
+  ULONG  HandleAttributes;
+  ULONG  Reserved;
 };
 
-struct SYSTEM_HANDLE_INFORMATION
+struct SYSTEM_HANDLE_INFORMATION_EX
 {
-  ULONG         Count;
-  SYSTEM_HANDLE Handles[1];
+  ULONG_PTR NumberOfHandles;
+  ULONG_PTR Reserved;
+  SYSTEM_HANDLE_TABLE_ENTRY_INFO_EX Handles[1];
 };
 
 struct NTFUNC_THREAD_PARAMS
@@ -583,46 +586,44 @@ static BOOL CALLBACK EnumWindowCaptionsProc(HWND hWnd, LPARAM lParam)
   return TRUE;
 }
 
-static SYSTEM_HANDLE_INFORMATION* GetSystemHandleInformation()
+static SYSTEM_HANDLE_INFORMATION_EX* GetSystemHandleInformation()
 {
-  DWORD size = 0;
-  const DWORD maxSize = 16777216;
-  SYSTEM_HANDLE_INFORMATION* pSysHandleInformation;
+  static const ULONG MAX_BUFFER_SIZE = 256 * 1024 * 1024;
+
+  PVOID buffer;
+  ULONG bufferSize;
+  NTSTATUS status;
 
   if (!SystemFuncInit())
     return NULL;
-  
-  // Find the size to allocate.
-  pSysHandleInformation = (SYSTEM_HANDLE_INFORMATION*)GlobalAlloc(GPTR, sizeof(SYSTEM_HANDLE_INFORMATION));
-  if (pSysHandleInformation == NULL)
-    return NULL;
-  NtQuerySystemInformation(SystemHandleInformation, pSysHandleInformation, sizeof(SYSTEM_HANDLE_INFORMATION), &size);
-  GlobalFree(pSysHandleInformation);
-  if (size == 0)
-    size = 4096;
 
-  while (size < maxSize)
+  bufferSize = 0x10000;
+  buffer = GlobalAlloc(GPTR, bufferSize);
+  if (buffer == NULL)
+    return NULL;
+
+  while ((status = NtQuerySystemInformation(SystemExtendedHandleInformation,
+    buffer, bufferSize, NULL)) == STATUS_INFO_LENGTH_MISMATCH)
   {
-    // Allocate required memory.
-    pSysHandleInformation = (SYSTEM_HANDLE_INFORMATION*)GlobalAlloc(GPTR, size);
-    if (pSysHandleInformation == NULL)
+    GlobalFree(buffer);
+    bufferSize *= 2;
+
+    // Fail if we're resizing the buffer to something very large.
+    if (bufferSize > MAX_BUFFER_SIZE)
       return NULL;
 
-    // Query the objects (system wide).
-    NTSTATUS res = NtQuerySystemInformation(SystemHandleInformation, pSysHandleInformation, size, NULL);
-    if (NT_SUCCESS(res))
-      break;
-
-    GlobalFree(pSysHandleInformation);
-    pSysHandleInformation = NULL;
-
-    if (res != STATUS_INFO_LENGTH_MISMATCH)
-      break;
-
-    size *= 2;
+    buffer = GlobalAlloc(GPTR, bufferSize);
+    if (buffer == NULL)
+      return NULL;
   }
 
-  return pSysHandleInformation;
+  if (!NT_SUCCESS(status))
+  {
+    GlobalFree(buffer);
+    return NULL;
+  }
+
+  return (SYSTEM_HANDLE_INFORMATION_EX*)buffer;
 }
 
 // Get the process image file name.
@@ -739,10 +740,10 @@ ULONG WINAPI GetSystemHandlesCount()
 {
   ULONG count;
 
-  SYSTEM_HANDLE_INFORMATION* pSysHandleInformation = GetSystemHandleInformation();
+  SYSTEM_HANDLE_INFORMATION_EX* pSysHandleInformation = GetSystemHandleInformation();
   if (pSysHandleInformation != NULL)
   {
-    count = pSysHandleInformation->Count;
+    count = pSysHandleInformation->NumberOfHandles;
     GlobalFree(pSysHandleInformation);
   }
   else
@@ -759,20 +760,20 @@ BOOL WINAPI EnumSystemHandles(ENUM_FILES lpEnumFiles, ENUM_OPTIONS* pOpt)
   DWORD dwProcessIdLast = -1;
   BOOL bOpenProcessSuccessLast = FALSE;
 
-  SYSTEM_HANDLE_INFORMATION* pSysHandleInformation = GetSystemHandleInformation();
+  SYSTEM_HANDLE_INFORMATION_EX* pSysHandleInformation = GetSystemHandleInformation();
   if (pSysHandleInformation == NULL)
     return TRUE;
 
   PVOID pOldValue = DisableFileSystemRedirection();
 
   BOOL bAbort = FALSE;
-  file.TotalFiles = pSysHandleInformation->Count;
+  file.TotalFiles = pSysHandleInformation->NumberOfHandles;
 
   // Iterating through the objects.
-  for (DWORD i = 0; i < pSysHandleInformation->Count; i++)
+  for (ULONG_PTR i = 0; i < pSysHandleInformation->NumberOfHandles; i++)
   {
     file.FileNumber = i+1;
-    file.ProcessId = pSysHandleInformation->Handles[i].ProcessId;
+    file.ProcessId = (DWORD)pSysHandleInformation->Handles[i].UniqueProcessId;
 
     // New process Id to get the image file name of.
     if (file.ProcessId != dwProcessIdLast)

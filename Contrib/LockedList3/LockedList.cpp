@@ -2618,7 +2618,8 @@ BOOL CALLBACK EnumSystemProcesses64Proc(FILE_INFORMATION& file, LPARAM lParam)
 	cds.dwData = 1;
 	cds.cbData = sizeof(FILE_INFORMATION);
 	cds.lpData = const_cast<FILE_INFORMATION*>(&file);
-  return SendMessage(hCallerWindow, WM_COPYDATA, NULL, (LPARAM)(LPVOID)&cds) && IsWindow(hCallerWindow);
+
+  return IsWindow(hCallerWindow) && SendMessage(hCallerWindow, WM_COPYDATA, NULL, (LPARAM)(LPVOID)&cds);
 }
 
 extern "C" void __declspec(dllexport) EnumSystemProcesses64W(HWND hwnd, HINSTANCE hinst, LPWSTR lpwszCmdLine, int nCmdShow)
@@ -2633,12 +2634,30 @@ extern "C" void __declspec(dllexport) EnumSystemProcesses64W(HWND hwnd, HINSTANC
     {
       BOOL fGetWindowCaption = nCmdLine > 1 && lstrcmpW(ppwszCmdLine[1], L"1") == 0;
       BOOL fEnumModules = nCmdLine > 2 && lstrcmpW(ppwszCmdLine[2], L"1") == 0;
-      
+
+      g_hFinishNow = NULL;
+      if (nCmdLine > 4)
+      {
+        DWORD hPID = (DWORD)wcstoul(ppwszCmdLine[3], NULL, 0);
+        HANDLE h = (HANDLE)wcstoul(ppwszCmdLine[4], NULL, 0);
+
+        HANDLE hParentProcess = OpenProcess(PROCESS_DUP_HANDLE, FALSE, hPID);
+        if (hParentProcess != NULL)
+        {
+          DuplicateHandle(hParentProcess, h, GetCurrentProcess(), &g_hFinishNow, 0, FALSE, DUPLICATE_SAME_ACCESS);
+          CloseHandle(hParentProcess);
+        }
+      }
+      if (g_hFinishNow == NULL)
+        StartEnumeratingNow();
+
       ENUM_OPTIONS opt;
-      StartEnumeratingNow();
       opt.GetWindowCaption = fGetWindowCaption;
       opt.lParam = (LPARAM)hCallerWindow;
       EnumSystemProcesses(EnumSystemProcesses64Proc, &opt, fEnumModules);
+
+      if (g_hFinishNow != NULL)
+      CloseHandle(g_hFinishNow);
     }
   }
 }
@@ -2659,7 +2678,9 @@ extern "C" void __declspec(dllexport) GetSystemModulesCount64W(HWND hwnd, HINSTA
 	    cds.dwData = 2;
 	    cds.cbData = sizeof(UINT);
 	    cds.lpData = const_cast<UINT*>(&uCount);
-      SendMessage(hCallerWindow, WM_COPYDATA, NULL, (LPARAM)(LPVOID)&cds) && IsWindow(hCallerWindow);
+
+      if (IsWindow(hCallerWindow))
+        SendMessage(hCallerWindow, WM_COPYDATA, NULL, (LPARAM)(LPVOID)&cds);
     }
   }
 }
@@ -2743,8 +2764,8 @@ static BOOL CallLockedList64(PTCHAR pszFunction, PTCHAR pszArguments)
     CallbackWindow64ProcOld = (WNDPROC)SetWindowLongPtr(hCallbackWindow, GWLP_WNDPROC, (LONG_PTR)CallbackWindow64WndProc);
 
   //-- prepare rundll32 command line and execute it (pass the callback window handle as a argument).
-  PTCHAR pszParams = (PTCHAR)LocalAlloc(LPTR, sizeof(TCHAR) * (lstrlen(szPlugin64Name) + lstrlen(pszFunction) + lstrlen(pszArguments) + 32));
-  wsprintf(pszParams, TEXT("%s,%s 0x%p %s"), szPlugin64Name, pszFunction, hCallbackWindow, pszArguments);
+  PTCHAR pszParams = (PTCHAR)GlobalAlloc(LPTR, sizeof(TCHAR) * (lstrlen(szPlugin64Name) + lstrlen(pszFunction) + lstrlen(pszArguments) + 32 * 3));
+  wsprintf(pszParams, TEXT("%s,%s 0x%p %s %u 0x%p"), szPlugin64Name, pszFunction, hCallbackWindow, pszArguments, GetCurrentProcessId(), g_hFinishNow);
 
   //-- get clear plugins folder: it will be current dir for the new process.
   PathRemoveFileSpec(szThisFilePath);
@@ -2757,7 +2778,7 @@ static BOOL CallLockedList64(PTCHAR pszFunction, PTCHAR pszArguments)
   sei.lpFile = TEXT("rundll32.exe");
   sei.lpParameters = pszParams;
   sei.lpDirectory = szThisFilePath;
-  sei.nShow = SW_SHOWNORMAL;
+  sei.nShow = SW_HIDE;
 
   if (ShellExecuteEx(&sei) && sei.hProcess)
   {
@@ -2769,7 +2790,7 @@ static BOOL CallLockedList64(PTCHAR pszFunction, PTCHAR pszArguments)
         break;
 
       MSG msg;
-      if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
+      while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
       {
         TranslateMessage(&msg);
         DispatchMessage(&msg);
@@ -2789,7 +2810,7 @@ static BOOL CallLockedList64(PTCHAR pszFunction, PTCHAR pszArguments)
     DestroyWindow(hCallbackWindow);
   }
   
-  LocalFree(pszParams);
+  GlobalFree(pszParams);
   return TRUE;
 }
 

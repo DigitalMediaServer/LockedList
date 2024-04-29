@@ -67,6 +67,7 @@ BOOL WINAPI EnumSystemProcesses(ENUM_FILES, ENUM_OPTIONS*, BOOL);
 BOOL WINAPI EnumProcessIds(ENUM_PROCESS_IDS, ENUM_OPTIONS*);
 BOOL WINAPI EnumApplications(ENUM_APPLICATIONS, ENUM_OPTIONS*);
 
+extern HANDLE g_hFinishNow;
 ULONG WINAPI GetSystemHandlesCount();
 UINT WINAPI GetSystemModulesCount();
 UINT WINAPI GetProcessIdsCount();

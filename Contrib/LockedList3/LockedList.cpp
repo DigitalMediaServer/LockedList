@@ -2,8 +2,8 @@
 
   Title:   LockedList plug-in
   Author:  Afrow UK
-  Version: 3.0.0.5
-  Date:    26th February 2024
+  Version: 3.1.0.0
+  Date:    30th April 2024
 
   Description:
 
@@ -11,6 +11,15 @@
    that need to be modified/deleted etc by the installer.
 
   Changes:
+
+  3.1.0.0 - 30th April 2024
+  * Added SilentCancel NSIS function to cancel async search (cancel by callback may not help - the callback is called too rarely and for found items only).
+  * Added CleanupAsyncThread function to cleanup the state of async search thread before stating new search.
+  * Added IsAsyncDone function to help determine the current async search thread state.
+  * g_hThreadFiles handle now not closed after any async search to hold last search result (done, cancel or wait).
+  * Increased array sizes for lists (files, modules, classes, captions, custom items and folders) from 128 to 256.
+  * Removed unused g_hThreadAutoClose.
+  * Implemented termination of rundll32.exe spawned 64-bit child-process if the search is canceled
 
   3.0.0.5 - 26th February 2024
   * ANSI build did not include null-termination when converting Unicode

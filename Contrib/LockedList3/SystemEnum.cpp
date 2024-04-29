@@ -15,6 +15,16 @@
 
   Changes:
 
+  v2.0 - 19th April 2024
+  * Fixed Wow64DisableWow64FsRedirection was not reverted to initial value on exit.
+  * Re-wrote GetSystemHandleInformation() - now NtQuerySystemInformation used SystemExtendedHandleInformation (instead of obsolete SystemHandleInformation).
+    Large number of handles led to overflow fields of SYSTEM_HANDLE structure (USHORT HandleValue and other).
+  * Handle types are now cached to improve performance.
+  * Fixed erroneous ResetEvent(g_hFinishNow) in SystemFuncInit - be called several times during 1 search:
+      (GetSystemHandlesCount and EnumSystemHandles) or (GetSystemModulesCount and EnumSystemProcesses).
+    Now calling ResetEvent(g_hFinishNow) moved to SystemEnum - the main entry point of any enum, called only once
+  * Now EnumSystemHandles does not handle handles of processes that could not be opened using OpenProcess in GetProcessFileName (System, System Idle, and other privileged ones).
+
   v1.8 - 5th August 2014
   * Improved application window caption lookup to find "main" windows (no owner).
 

@@ -1,12 +1,12 @@
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-  LockedList plug-in 3.0.0.4 by Afrow UK
+  LockedList plug-in 3.1.0.0 by Afrow UK
 
-   An NSIS plug-in to display or get a list of 32-bit programs that are
+   An NSIS plug-in to display or get a list of programs that are
    locking a selection of files that have to be uninstalled or
    overwritten.
 
-   Last build: 19th April 2024
+   Last build: 30th April 2024
 
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -53,16 +53,16 @@
  Known issues/limitations
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-  * The plug-in uses API's only available on Windows NT4 and upwards and
+  * The plug-in uses API's only available on Windows XP and upwards and
     therefore you cannot use the plug-in on a version of Windows that is
-    older than Windows NT4.
+    older than Windows XP.
 
     WinVer.nsh will help in this area...
 
     !include WinVer.nsh
     ...
 
-      ${If} ${AtLeastWinNt4}
+      ${If} ${AtLeastWinXP}
         ; Call LockedList plugin.
       ${EndIf}
 
@@ -405,6 +405,22 @@
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  Change log
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  3.1.0.0 - 30th April 2024
+  * Added SilentCancel NSIS function to cancel async search (cancel by
+    callback may not help - the callback is called too rarely and for
+	found items only).
+  * Added CleanupAsyncThread function to cleanup the state of async
+    search thread before stating new search.
+  * Added IsAsyncDone function to help determine the current async
+    search thread state.
+  * g_hThreadFiles handle now not closed after any async search to hold
+    last search result (done, cancel or wait).
+  * Increased array sizes for lists (files, modules, classes, captions,
+    custom items and folders) from 128 to 256.
+  * Removed unused g_hThreadAutoClose.
+  * Implemented termination of rundll32.exe spawned 64-bit child-process
+    if the search is canceled
 
   3.0.0.5 - 26th February 2024
   * ANSI build did not include null-termination when converting Unicode
